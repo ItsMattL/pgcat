@@ -2,31 +2,30 @@
 
 [![CircleCI](https://circleci.com/gh/postgresml/pgcat/tree/main.svg?style=svg)](https://circleci.com/gh/postgresml/pgcat/tree/main)
 <a href="https://discord.gg/DmyJP3qJ7U" target="_blank">
-    <img src="https://img.shields.io/discord/1013868243036930099" alt="Join our Discord!" />
+<img src="https://img.shields.io/discord/1013868243036930099" alt="Join our Discord!" />
 </a>
 
 PostgreSQL pooler and proxy (like PgBouncer) with support for sharding, load balancing, failover and mirroring.
 
 ## Features
 
-| **Feature** | **Status** | **Comments** |
-|-------------|------------|--------------|
-| Transaction pooling | **Stable** | Identical to PgBouncer with notable improvements for handling bad clients and abandoned transactions. |
-| Session pooling | **Stable** | Identical to PgBouncer. |
-| Multi-threaded runtime | **Stable** | Using Tokio asynchronous runtime, the pooler takes advantage of multicore machines. |
-| Load balancing of read queries | **Stable** | Queries are automatically load balanced between replicas and the primary. |
-| Failover | **Stable** | Queries are automatically rerouted around broken replicas, validated by regular health checks. |
-| Admin database statistics | **Stable** | Pooler statistics and administration via the `pgbouncer` and `pgcat` databases. |
-| Prometheus statistics | **Stable** | Statistics are reported via a HTTP endpoint for Prometheus. |
-| SSL/TLS | **Stable** | Clients can connect to the pooler using TLS. Pooler can connect to Postgres servers using TLS. |
-| Client/Server authentication | **Stable** | Clients can connect using MD5 authentication, supported by `libpq` and all Postgres client drivers. PgCat can connect to Postgres using MD5 and SCRAM-SHA-256. |
-| Live configuration reloading | **Stable** | Identical to PgBouncer; all settings can be reloaded dynamically (except `host` and `port`). |
-| Auth passthrough | **Stable** | MD5 password authentication can be configured to use an `auth_query` so no cleartext passwords are needed in the config file.|
-| Sharding using extended SQL syntax | **Experimental** | Clients can dynamically configure the pooler to route queries to specific shards. |
-| Sharding using comments parsing/Regex | **Experimental** | Clients can include shard information (sharding key, shard ID) in the query comments. |
-| Automatic sharding | **Experimental** | PgCat can parse queries, detect sharding keys automatically, and route queries to the correct shard. |
-| Mirroring | **Experimental** | Mirror queries between multiple databases in order to test servers with realistic production traffic. |
-
+| **Feature**                           | **Status**       | **Comments**                                                                                                                                                   |
+| ------------------------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Transaction pooling                   | **Stable**       | Identical to PgBouncer with notable improvements for handling bad clients and abandoned transactions.                                                          |
+| Session pooling                       | **Stable**       | Identical to PgBouncer.                                                                                                                                        |
+| Multi-threaded runtime                | **Stable**       | Using Tokio asynchronous runtime, the pooler takes advantage of multicore machines.                                                                            |
+| Load balancing of read queries        | **Stable**       | Queries are automatically load balanced between replicas and the primary.                                                                                      |
+| Failover                              | **Stable**       | Queries are automatically rerouted around broken replicas, validated by regular health checks.                                                                 |
+| Admin database statistics             | **Stable**       | Pooler statistics and administration via the `pgbouncer` and `pgcat` databases.                                                                                |
+| Prometheus statistics                 | **Stable**       | Statistics are reported via a HTTP endpoint for Prometheus.                                                                                                    |
+| SSL/TLS                               | **Stable**       | Clients can connect to the pooler using TLS. Pooler can connect to Postgres servers using TLS.                                                                 |
+| Client/Server authentication          | **Stable**       | Clients can connect using MD5 authentication, supported by `libpq` and all Postgres client drivers. PgCat can connect to Postgres using MD5 and SCRAM-SHA-256. |
+| Live configuration reloading          | **Stable**       | Identical to PgBouncer; all settings can be reloaded dynamically (except `host` and `port`).                                                                   |
+| Auth passthrough                      | **Stable**       | MD5 password authentication can be configured to use an `auth_query` so no cleartext passwords are needed in the config file.                                  |
+| Sharding using extended SQL syntax    | **Experimental** | Clients can dynamically configure the pooler to route queries to specific shards.                                                                              |
+| Sharding using comments parsing/Regex | **Experimental** | Clients can include shard information (sharding key, shard ID) in the query comments.                                                                          |
+| Automatic sharding                    | **Experimental** | PgCat can parse queries, detect sharding keys automatically, and route queries to the correct shard.                                                           |
+| Mirroring                             | **Experimental** | Mirror queries between multiple databases in order to test servers with realistic production traffic.                                                          |
 
 ## Status
 
@@ -71,6 +70,8 @@ Some features remain experimental and are being actively developed. They are opt
 
 ## Deployment
 
+### Docker
+
 See `Dockerfile` for example deployment using Docker. The pooler is configured to spawn 4 workers so 4 CPUs are recommended for optimal performance. That setting can be adjusted to spawn as many (or as little) workers as needed.
 
 A Docker image is available from `docker pull ghcr.io/postgresml/pgcat:latest`. See our [Github packages repository](https://github.com/postgresml/pgcat/pkgs/container/pgcat).
@@ -82,6 +83,13 @@ docker-compose up
 
 # In a new terminal:
 PGPASSWORD=postgres psql -h 127.0.0.1 -p 6432 -U postgres -c 'SELECT 1'
+```
+
+### Helm
+
+```bash
+helm repo add pgcat http://postgresml.github.io/pgcat
+helm install pgcat pgcat/pgcat -n pgcat -f values.yaml
 ```
 
 ### Config
@@ -136,21 +144,25 @@ This will open a terminal in an environment similar to that used in tests. In th
 ## Usage
 
 ### Session mode
+
 In session mode, a client talks to one server for the duration of the connection. Prepared statements, `SET`, and advisory locks are supported. In terms of supported features, there is very little if any difference between session mode and talking directly to the server.
 
 To use session mode, change `pool_mode = "session"`.
 
 ### Transaction mode
+
 In transaction mode, a client talks to one server for the duration of a single transaction; once it's over, the server is returned to the pool. Prepared statements, `SET`, and advisory locks are not supported; alternatives are to use `SET LOCAL` and `pg_advisory_xact_lock` which are scoped to the transaction.
 
 This mode is enabled by default.
 
 ### Load balancing of read queries
+
 All queries are load balanced against the configured servers using either the random or least open connections algorithms. The most straightforward configuration example would be to put this pooler in front of several replicas and let it load balance all queries.
 
 If the configuration includes a primary and replicas, the queries can be separated with the built-in query parser. The query parser, implemented with the `sqlparser` crate, will interpret the query and route all `SELECT` queries to a replica, while all other queries including explicit transactions will be routed to the primary.
 
 #### Query parser
+
 The query parser will do its best to determine where the query should go, but sometimes that's not possible. In that case, the client can select which server it wants using this custom SQL syntax:
 
 ```sql
@@ -175,14 +187,17 @@ The setting will persist until it's changed again or the client disconnects.
 By default, all queries are routed to the first available server; `default_role` setting controls this behavior.
 
 ### Failover
+
 All servers are checked with a `;` (very fast) query before being given to a client. Additionally, the server health is monitored with every client query that it processes. If the server is not reachable, it will be banned and cannot serve any more transactions for the duration of the ban. The queries are routed to the remaining servers. If all servers become banned, the ban list is cleared: this is a safety precaution against false positives. The primary can never be banned.
 
 The ban time can be changed with `ban_time`. The default is 60 seconds.
 
 ### Sharding
+
 We use the `PARTITION BY HASH` hashing function, the same as used by Postgres for declarative partitioning. This allows to shard the database using Postgres partitions and place the partitions on different servers (shards). Both read and write queries can be routed to the shards using this pooler.
 
 #### Extended syntax
+
 To route queries to a particular shard, we use this custom SQL syntax:
 
 ```sql
@@ -196,7 +211,6 @@ SET SHARDING KEY TO '1234';
 The active shard will last until it's changed again or the client disconnects. By default, the queries are routed to shard 0.
 
 For hash function implementation, see `src/sharding.rs` and `tests/sharding/partition_hash_test_setup.sql`.
-
 
 ##### ActiveRecord/Rails
 
@@ -247,6 +261,7 @@ SELECT * FROM users WHERE email = 'test@example.com'; -- shard setting lasts unt
 ```
 
 #### With comments
+
 Issuing queries to the pooler can cause additional latency. To reduce its impact, it's possible to include sharding information inside SQL comments sent via the query. This is reasonably easy to implement with ORMs like [ActiveRecord](https://api.rubyonrails.org/classes/ActiveRecord/QueryMethods.html#method-i-annotate) and [SQLAlchemy](https://docs.sqlalchemy.org/en/20/core/events.html#sql-execution-and-connection-events).
 
 ```
@@ -256,6 +271,7 @@ Issuing queries to the pooler can cause additional latency. To reduce its impact
 ```
 
 #### Automatic query parsing
+
 PgCat can use the `sqlparser` crate to parse SQL queries and extract the sharding key. This is configurable with the `automatic_sharding_key` setting. This feature is still experimental, but it's the ideal implementation for sharding, requiring no client modifications.
 
 ### Statistics reporting
@@ -289,4 +305,3 @@ Many thanks to our amazing contributors!
 <a href = "https://github.com/postgresml/pgcat/graphs/contributors">
   <img src = "https://contrib.rocks/image?repo=postgresml/pgcat"/>
 </a>
-
